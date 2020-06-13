@@ -1,0 +1,72 @@
+plugins {
+    id 'java-library'
+    id "com.diffplug.gradle.spotless" version "3.25.0"
+}
+
+group 'net.iaminnovative.'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 11
+
+repositories {
+    jcenter()
+    maven { url 'https://hyperledger-org.bintray.com/besu-repo' }
+    mavenCentral()
+}
+
+dependencies {
+    annotationProcessor 'com.google.auto.service:auto-service:1.0-rc4'
+
+    compileOnly 'com.google.auto.service:auto-service:1.0-rc4'
+    compileOnly 'info.picocli:picocli:3.9.5'
+    compileOnly 'org.apache.logging.log4j:log4j-api:2.12.0'
+    compileOnly 'org.apache.logging.log4j:log4j-core:2.12.0'
+    compileOnly 'org.apache.tuweni:tuweni-toml:1.0.0'
+    compileOnly 'org.hyperledger.besu:plugin-api:1.4.5'
+    compileOnly 'org.hyperledger.besu.internal:crypto:1.4.5'
+
+    testImplementation 'junit:junit:4.12'
+}
+
+
+jar {
+    archiveBaseName = project.name
+    manifest {
+        attributes(
+                'Specification-Title': archiveBaseName.get(),
+                'Specification-Version': rootProject.version,
+                'Implementation-Title': archiveBaseName.get(),
+                'Implementation-Version': rootProject.version
+                )
+    }
+    from {
+        configurations.compile.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    exclude 'META-INF/*.RSA', 'META-INF/*.SF', 'META-INF/*.DSA'
+}
+
+spotless {
+    java {
+        // This path needs to be relative to each project
+        target fileTree('.') {
+            include '**/src/*/java/**/*.java'
+            exclude '**/.gradle/**'
+            exclude '**/generated/**'
+        }
+        removeUnusedImports()
+        googleJavaFormat("1.7").aosp()
+        importOrder 'java', '', 'net.iaminnovative', '\\#'
+        trimTrailingWhitespace()
+        endWithNewline()
+        licenseHeaderFile "$rootDir/gradle/spotless/java.license"
+    }
+    groovyGradle {
+        target '*.gradle'
+        greclipse().configFile("$rootDir/gradle/spotless/formatter.properties")
+        endWithNewline()
+        indentWithSpaces(4)
+        paddedCell()
+    }
+}
