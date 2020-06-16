@@ -38,7 +38,7 @@ $BESU_HOME/bin/besu --config-file=options.toml --
 
 # Testing with SoftHSM
 
-## Initializae a slot
+## Initialize a slot
 
 ```
 softhsm2-util --init-token --slot 0 --label besu
@@ -49,7 +49,23 @@ softhsm2-util --init-token --slot 0 --label besu
 ```
 keytool -genkeypair -alias besu -keyalg EC -keystore NONE -storetype PKCS11 -providerClass sun.security.pkcs11.SunPKCS11 -providerArg /path/to/pkcs11.cfg -groupname secp256k1 -dname CN=besu
 ```
+## Enable the plugin
+
+security-module="hsm"
+
+## HSM Security Module Plugin Options
+
+### Alias of the key in the keystore
+plugin-hsm-key-alias="besu"
+
+### Password (pin) for the keystore
+plugin-hsm-keystore-password="12345"    
+
+### PKCS11 provider configuration file path
+plugin-hsm-keystore-config="./softhsm.cfg"
+
+The above can be passed vi the cli using --plugin...
 
 # Disclaimer
 
-This is very much a demo for other to learn from - use at your own risk...
+This is very much a demo for others to learn from - use at your own risk...
