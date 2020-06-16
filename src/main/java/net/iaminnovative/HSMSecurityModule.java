@@ -12,6 +12,8 @@
  */
 package net.iaminnovative;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.security.*;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPublicKey;
@@ -24,10 +26,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.tuweni.bytes.Bytes32;
 import org.hyperledger.besu.crypto.ECPointUtil;
-import org.hyperledger.besu.crypto.SECP256K1;
 import org.hyperledger.besu.plugin.services.securitymodule.SecurityModule;
 import org.hyperledger.besu.plugin.services.securitymodule.SecurityModuleException;
 import org.hyperledger.besu.plugin.services.securitymodule.data.PublicKey;
+
+import net.iaminnovative.configuration.HSMCLIOptions;
 
 public class HSMSecurityModule implements SecurityModule {
 
@@ -38,32 +41,46 @@ public class HSMSecurityModule implements SecurityModule {
 
     private static final ECGenParameterSpec SECP256K1_CURVE = new ECGenParameterSpec(CURVE_NAME);
 
+    private HSMCLIOptions options;
     private static Provider provider = Security.getProvider("SunPKCS11");
-    private static PrivateKey privateKey;
-    private static HSMPublicKey publicKey;
+    private PrivateKey privateKey;
+    private HSMPublicKey publicKey;
 
-    public HSMSecurityModule() {}
+    public HSMSecurityModule(HSMCLIOptions options) {
+        this.options = options;
+    }
 
-    public void initialize(String keyAlias, String configFile, String password)
-            throws SecurityModuleException {
+    public void initialize() throws SecurityModuleException {
+        LOG.debug(options.toString());
         try {
-            provider = provider.configure(configFile);
+            provider = provider.configure(options.keystoreConfig);
             Security.addProvider(provider);
 
             KeyStore keyStore = KeyStore.getInstance("PKCS11", provider);
 
-            keyStore.load(null, password.toCharArray());
+            keyStore.load(null, options.keystorePassword.toCharArray());
 
-            privateKey = (PrivateKey) keyStore.getKey(keyAlias, null);
+            privateKey = (PrivateKey) keyStore.getKey(options.keyAlias, null);
             if (privateKey != null) {
                 // Get certificate of public key
-                X509Certificate cert = (X509Certificate) keyStore.getCertificate(keyAlias);
+                X509Certificate cert = (X509Certificate) keyStore.getCertificate(options.keyAlias);
                 // Get & cache public key
                 publicKey = new HSMPublicKey((ECPublicKey) cert.getPublicKey());
+            } else {
+                throw new SecurityModuleException("Key Not Found");
             }
 
-        } catch (Exception ex) {
-            throw new SecurityModuleException("Keystore Error: " + ex.getMessage(), ex);
+        } catch (final IOException ex) {
+            if (ex.getCause() instanceof UnrecoverableKeyException) {
+                throw new SecurityModuleException("Keystore Password Invalid");
+            }
+            throw new SecurityModuleException("Keystore Error: " + ex.getMessage());
+        } catch (final Exception ex) {
+            if (ex.getCause() instanceof FileNotFoundException) {
+                throw new SecurityModuleException(
+                        "Keystore Configuration file not found " + options.keystoreConfig);
+            }
+            throw new SecurityModuleException("Keystore Error: " + ex.getMessage());
         }
     }
 
@@ -82,14 +99,11 @@ public class HSMSecurityModule implements SecurityModule {
 
     @Override
     public HSMPublicKey getPublicKey() throws SecurityModuleException {
-        LOG.info("getPublicKey");
-        if (!(publicKey == null)) {
+        if ((publicKey == null)) {
+            initialize();
             LOG.info(
-                    SECP256K1.PublicKey.create(ECPointUtil.getEncodedBytes(publicKey.getW()))
-                            .toString());
-        }
-        else {
-
+                    "Using keypair with public key {} from hsm",
+                    ECPointUtil.getEncodedBytes(publicKey.getW()).toString());
         }
         return publicKey;
     }
@@ -98,6 +112,7 @@ public class HSMSecurityModule implements SecurityModule {
     public Bytes32 calculateECDHKeyAgreement(PublicKey partyKey) throws SecurityModuleException {
 
         try {
+
             AlgorithmParameters parameters = AlgorithmParameters.getInstance(ALGORITHM, provider);
             parameters.init(SECP256K1_CURVE);
             ECParameterSpec ecParameters = parameters.getParameterSpec(ECParameterSpec.class);

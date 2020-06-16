@@ -56,24 +56,21 @@ public class HSMSecurityPlugin implements BesuPlugin {
                         this::createPicoCLIOptions,
                         () -> LOG.error("Could not obtain PicoCLIOptionsService"));
 
+        // Register the security service hare - CLI options aren't available
         context.getService(SecurityModuleService.class)
                 .ifPresentOrElse(
                         this::createAndRegister,
                         () ->
                                 LOG.error(
                                         "Failed to register Security Module due to missing SecurityModuleService."));
-
-
     }
 
     @Override
     public void start() {
+        // Options only populated at this point in the plugin liecycle.
         LOG.info("Starting HSM Security Plugin with options " + options);
-        // Initialise here and not in constructor as options aren't available until start
-        // TODO: Check for missing arguments (can't set to required in Option otherwise besu command
-        // barfs)
-        hsmSecurityModule.initialize(
-                options.keyAlias, options.keystoreConfig, options.keystorePassword);
+
+        // Can't setup security module here as too late... getPublicKey already called
     }
 
     @Override
@@ -83,7 +80,8 @@ public class HSMSecurityPlugin implements BesuPlugin {
 
     private void createAndRegister(final SecurityModuleService service) {
 
-        hsmSecurityModule = new HSMSecurityModule();
+        // Options will be populated when module first used.
+        hsmSecurityModule = new HSMSecurityModule(options);
 
         service.register(PLUGIN_NAME, Suppliers.memoize(this::getSecurityModule)::get);
     }
